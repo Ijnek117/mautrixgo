@@ -1424,6 +1424,35 @@ func (cli *Client) InviteUser(ctx context.Context, roomID id.RoomID, req *ReqInv
 	return
 }
 
+// InviteUserWithResp invites a user to a room acceping a response from the server containing the invitee's sender_key for that room.
+// All future references to the invitee should use the sender_key rather than userID. 
+func (cli *Client) InviteUserWithResp(ctx context.Context, roomID id.RoomID, req *ReqInviteUser) (resp *InviteUserResp, err error) {
+	u := cli.BuildClientURL("v3", "rooms", roomID, "invite")
+	bodyBytes, err := cli.MakeRequest(ctx, http.MethodPost, u, req, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make invite request: %w", err)
+	}
+	
+	resp = &InviteUserResp{}
+	
+	if err = json.Unmarshal(bodyBytes, resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal the invite response body: %w", err)
+	}
+		
+	if cli.StateStore != nil {
+		// Will I need to eventually instead store the senderkey here?
+		if err = cli.StateStore.SetMembership(ctx, roomID, req.UserID, event.MembershipInvite); err != nil {
+			return nil, fmt.Errorf("failed to update membership in state store: %w", err)
+		}
+		if resp.SenderKey != "" {
+			if err = cli.StateStore.SetPseudoMapping(ctx, roomID, req.UserID, resp.SenderKey); err != nil {
+				return nil, fmt.Errorf("failed to add pseudo mapping in pseudomapping store %w", err)
+			}
+		}
+	}
+	return
+}
+
 // InviteUserByThirdParty invites a third-party identifier to a room. See https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidinvite-1
 func (cli *Client) InviteUserByThirdParty(ctx context.Context, roomID id.RoomID, req *ReqInvite3PID) (resp *RespInviteUser, err error) {
 	u := cli.BuildClientURL("v3", "rooms", roomID, "invite")

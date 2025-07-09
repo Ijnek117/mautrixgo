@@ -26,6 +26,8 @@ type StateStore interface {
 	GetMember(ctx context.Context, roomID id.RoomID, userID id.UserID) (*event.MemberEventContent, error)
 	TryGetMember(ctx context.Context, roomID id.RoomID, userID id.UserID) (*event.MemberEventContent, error)
 	SetMembership(ctx context.Context, roomID id.RoomID, userID id.UserID, membership event.Membership) error
+	// Maps userID's to room specific senderIDs
+	SetPseudoMapping(ctx context.Context, roomID id.RoomID, userID id.UserID, senderID id.SenderID) error
 	SetMember(ctx context.Context, roomID id.RoomID, userID id.UserID, member *event.MemberEventContent) error
 	IsConfusableName(ctx context.Context, roomID id.RoomID, currentUser id.UserID, name string) ([]id.UserID, error)
 	ClearCachedMembers(ctx context.Context, roomID id.RoomID, memberships ...event.Membership) error
@@ -96,14 +98,17 @@ func (cli *Client) StateStoreSyncHandler(ctx context.Context, evt *event.Event) 
 }
 
 type MemoryStateStore struct {
-	Registrations  map[id.UserID]bool                                    `json:"registrations"`
-	Members        map[id.RoomID]map[id.UserID]*event.MemberEventContent `json:"memberships"`
-	MembersFetched map[id.RoomID]bool                                    `json:"members_fetched"`
-	PowerLevels    map[id.RoomID]*event.PowerLevelsEventContent          `json:"power_levels"`
-	Encryption     map[id.RoomID]*event.EncryptionEventContent           `json:"encryption"`
+	Registrations map[id.UserID]bool                                    `json:"registrations"`
+	Members       map[id.RoomID]map[id.UserID]*event.MemberEventContent `json:"memberships"`
+	// Maps userIDs to SenderIDs
+	PseudoMappings map[id.RoomID]map[id.UserID]id.SenderID      `json:"pseudo_mappings"`
+	MembersFetched map[id.RoomID]bool                           `json:"members_fetched"`
+	PowerLevels    map[id.RoomID]*event.PowerLevelsEventContent `json:"power_levels"`
+	Encryption     map[id.RoomID]*event.EncryptionEventContent  `json:"encryption"`
 
 	registrationsLock sync.RWMutex
 	membersLock       sync.RWMutex
+	pseudoLock        sync.RWMutex
 	powerLevelsLock   sync.RWMutex
 	encryptionLock    sync.RWMutex
 }
@@ -112,6 +117,7 @@ func NewMemoryStateStore() StateStore {
 	return &MemoryStateStore{
 		Registrations:  make(map[id.UserID]bool),
 		Members:        make(map[id.RoomID]map[id.UserID]*event.MemberEventContent),
+		PseudoMappings: make(map[id.RoomID]map[id.UserID]id.SenderID),
 		MembersFetched: make(map[id.RoomID]bool),
 		PowerLevels:    make(map[id.RoomID]*event.PowerLevelsEventContent),
 		Encryption:     make(map[id.RoomID]*event.EncryptionEventContent),
@@ -221,6 +227,21 @@ func (store *MemoryStateStore) SetMembership(_ context.Context, roomID id.RoomID
 	}
 	store.Members[roomID] = members
 	store.membersLock.Unlock()
+	return nil
+}
+
+// Set a mapping between a userID and a SenderID for a specific room.
+func (store *MemoryStateStore) SetPseudoMapping(_ context.Context, roomID id.RoomID, userID id.UserID, senderID id.SenderID) error {
+	store.pseudoLock.Lock()
+	defer store.pseudoLock.Unlock()
+	mappings, ok := store.PseudoMappings[roomID]
+	if !ok {
+		mappings = map[id.UserID]id.SenderID{
+			userID: senderID,
+		}
+	}
+	mappings[userID] = senderID
+	store.PseudoMappings[roomID] = mappings
 	return nil
 }
 

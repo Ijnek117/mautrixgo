@@ -47,6 +47,12 @@ type RespForgetRoom struct{}
 // RespInviteUser is the JSON response for https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidinvite
 type RespInviteUser struct{}
 
+// RespInviteUser is the JSON response for https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidinvite
+// With the addition of the invitee's sender_key. 
+type InviteUserResp struct {
+	SenderKey id.SenderID `json:"sender_key"`
+}
+
 // RespKickUser is the JSON response for https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidkick
 type RespKickUser struct{}
 
