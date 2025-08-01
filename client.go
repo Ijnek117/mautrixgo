@@ -6,6 +6,11 @@ package mautrix
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1425,32 +1430,64 @@ func (cli *Client) InviteUser(ctx context.Context, roomID id.RoomID, req *ReqInv
 }
 
 // InviteUserWithResp invites a user to a room acceping a response from the server containing the invitee's sender_key for that room.
-// All future references to the invitee should use the sender_key rather than userID. 
-func (cli *Client) InviteUserWithResp(ctx context.Context, roomID id.RoomID, req *ReqInviteUser) (resp *InviteUserResp, err error) {
+func (cli *Client) InviteUserWithResp(ctx context.Context, roomID id.RoomID, req *ReqInviteEncryptedUser) (resp *InviteUserResp, err error) {
+	// TODO: modify to be new endpoint on dendrite
+	// e.g. u := cli.BuildClientURL("org.matrix.msc4014", "rooms", roomID, "invite")
 	u := cli.BuildClientURL("v3", "rooms", roomID, "invite")
 	bodyBytes, err := cli.MakeRequest(ctx, http.MethodPost, u, req, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make invite request: %w", err)
 	}
-	
 	resp = &InviteUserResp{}
-	
 	if err = json.Unmarshal(bodyBytes, resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal the invite response body: %w", err)
 	}
-		
-	if cli.StateStore != nil {
-		// Will I need to eventually instead store the senderkey here?
-		if err = cli.StateStore.SetMembership(ctx, roomID, req.UserID, event.MembershipInvite); err != nil {
-			return nil, fmt.Errorf("failed to update membership in state store: %w", err)
-		}
-		if resp.SenderKey != "" {
-			if err = cli.StateStore.SetPseudoMapping(ctx, roomID, req.UserID, resp.SenderKey); err != nil {
-				return nil, fmt.Errorf("failed to add pseudo mapping in pseudomapping store %w", err)
-			}
-		}
-	}
+
 	return
+}
+
+// Fetches the TLS certificate from the invitee's homeserver and encrypts the userID with the public key.
+func (cli *Client) EncryptUser(ctx context.Context, user id.UserID) (encryptedUser id.EncryptedUserID, err error) {
+	var homeserver = user.Homeserver()
+	u := cli.BuildClientURL("v3", "server_tls_keys", homeserver)
+	bodyBytes, err := cli.MakeRequest(ctx, http.MethodGet, u, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get certificate from %v", homeserver)
+	}
+	resp := &ServerTLSCertResponse{}
+	if err := json.Unmarshal(bodyBytes, resp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal the TLS certificate response body: %w", err)
+	}
+
+	decodedPublicKeyBytes, err := base64.StdEncoding.DecodeString(resp.PublicKeyBase64)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode Base64 public key: %v", err)
+	}
+
+	parsedPublicKey, err := x509.ParsePKIXPublicKey(decodedPublicKeyBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse public key: %v", err)
+	}
+
+	rsaPublicKey, ok := parsedPublicKey.(*rsa.PublicKey)
+	if !ok {
+		return "", fmt.Errorf("parsed public key is not an RSA public key")
+	}
+
+	// Encrypt the userID localpart using the parsed public key
+	localpart := user.Localpart()
+	localpartBytes := []byte(localpart)
+
+	// Encrypt with RSA-OAEP
+	// With sha256 as the hashing function
+	encryptedBytes, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, rsaPublicKey, localpartBytes, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt userID: %v", err)
+	}
+
+	encryptedUser = id.NewEncryptedUserID(base64.StdEncoding.EncodeToString(encryptedBytes), user.Homeserver())
+
+	return encryptedUser, err
 }
 
 // InviteUserByThirdParty invites a third-party identifier to a room. See https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidinvite-1

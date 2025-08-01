@@ -722,3 +722,12 @@ type RespGetRelations struct {
 	PrevBatch      string         `json:"prev_batch,omitempty"`
 	RecursionDepth int            `json:"recursion_depth,omitempty"`
 }
+
+// Could remove Validation Status?
+type ServerTLSCertResponse struct {
+	ServerName        string `json:"server_name"`
+	PublicKeyBase64   string `json:"public_key_base64,omitempty"`
+	ValidationStatus  string `json:"validation_status"`// "trusted", "untrusted_self_signed", "unreachable", "error"
+	Error             string `json:"error,omitempty"`
+    FingerprintSHA256 string `json:"fingerprint_sha256,omitempty"` 
+}

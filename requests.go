@@ -183,6 +183,11 @@ type ReqInviteUser struct {
 	UserID id.UserID `json:"user_id"`
 }
 
+type ReqInviteEncryptedUser struct {
+	Reason string             `json:"reason,omitempty"`
+	UserID id.EncryptedUserID `json:"user_id"`
+}
+
 // ReqKickUser is the JSON request for https://spec.matrix.org/v1.2/client-server-api/#post_matrixclientv3roomsroomidkick
 type ReqKickUser struct {
 	Reason string    `json:"reason,omitempty"`
