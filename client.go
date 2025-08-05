@@ -1447,6 +1447,7 @@ func (cli *Client) InviteUserWithResp(ctx context.Context, roomID id.RoomID, req
 }
 
 // Fetches the TLS certificate from the invitee's homeserver and encrypts the userID with the public key.
+// Need to verify certificate.
 func (cli *Client) EncryptUser(ctx context.Context, user id.UserID) (encryptedUser id.EncryptedUserID, err error) {
 	var homeserver = user.Homeserver()
 	u := cli.BuildClientURL("v3", "server_tls_keys", homeserver)

@@ -1,6 +1,10 @@
 # mautrix-go
 [![GoDoc](https://pkg.go.dev/badge/maunium.net/go/mautrix)](https://pkg.go.dev/maunium.net/go/mautrix)
 
+> **Research Project:** This is a modified fork of the original mautrixgo repository. The code here contains changes for the Achieving User Pseudonymity in Federated End-to-End Encrypted Messaging Platforms research project.
+
+> For a full description of the modifications this component, please see the **[MODIFICATIONS.md](MODIFICATIONS.md)** file.
+
 A Golang Matrix framework. Used by [gomuks](https://matrix.org/docs/projects/client/gomuks),
 [go-neb](https://github.com/matrix-org/go-neb), [mautrix-whatsapp](https://github.com/mautrix/whatsapp)
 and others.
